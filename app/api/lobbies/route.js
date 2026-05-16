@@ -61,23 +61,30 @@ function normalizeLobby(lobby, fallbackCode = "") {
     }),
   );
 
+  const boards = [
+    normalizeBoard(lobby.boards?.[0] ?? lobby.boards?.["0"]),
+    normalizeBoard(lobby.boards?.[1] ?? lobby.boards?.["1"]),
+  ];
+  const calledNumbers = toArray(lobby.calledNumbers, 25)
+    .map((number) => Number(number))
+    .filter((number) => number >= 1 && number <= 25);
+  const savedWinnerIndex =
+    Number(lobby.winnerIndex) === 0 || Number(lobby.winnerIndex) === 1
+      ? Number(lobby.winnerIndex)
+      : null;
+
   return {
     code: normalizeCode(lobby.code || fallbackCode),
     players,
-    boards: [
-      normalizeBoard(lobby.boards?.[0] ?? lobby.boards?.["0"]),
-      normalizeBoard(lobby.boards?.[1] ?? lobby.boards?.["1"]),
-    ],
+    boards,
     nextNumbers: toArray(lobby.nextNumbers, 2, 1).map((number) =>
       Number(number) >= 1 && Number(number) <= 25 ? Number(number) : 1,
     ),
-    calledNumbers: toArray(lobby.calledNumbers, 25)
-      .map((number) => Number(number))
-      .filter((number) => number >= 1 && number <= 25),
+    calledNumbers,
     turn: Number(lobby.turn) === 1 ? 1 : 0,
     winnerIndex:
-      Number(lobby.winnerIndex) === 0 || Number(lobby.winnerIndex) === 1
-        ? Number(lobby.winnerIndex)
+      savedWinnerIndex !== null && calledNumbers.length > 0
+        ? savedWinnerIndex
         : null,
   };
 }

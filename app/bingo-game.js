@@ -308,7 +308,8 @@ export default function BingoGame() {
     [lobby],
   );
   const winnerIndex =
-    lobby?.winnerIndex === 0 || lobby?.winnerIndex === 1
+    (lobby?.winnerIndex === 0 || lobby?.winnerIndex === 1) &&
+    scores[lobby.winnerIndex] >= 5
       ? lobby.winnerIndex
       : scores.findIndex((score) => score >= 5);
   const winner = winnerIndex >= 0 ? lobby?.players[winnerIndex]?.name : "";
