@@ -1,7 +1,8 @@
 const BOARD_SIZE = 25;
 const EMPTY_BOARD = Array.from({ length: BOARD_SIZE }, () => null);
-const FIREBASE_PROJECT_ID = "bingo-d0bf7";
-const FIREBASE_API_KEY = "AIzaSyCPhWe234EJ5_5He2nqqrjBiysBDqkjKFc";
+const FIREBASE_DATABASE_URL =
+  process.env.FIREBASE_DATABASE_URL ??
+  "https://bingo-d0bf7-default-rtdb.firebaseio.com";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +33,7 @@ function json(data, init) {
 }
 
 function getLobbyUrl(code) {
-  return [
-    "https://firestore.googleapis.com/v1/projects",
-    FIREBASE_PROJECT_ID,
-    "databases/(default)/documents/lobbies",
-    code,
-  ].join("/") + `?key=${FIREBASE_API_KEY}`;
+  return `${FIREBASE_DATABASE_URL.replace(/\/$/, "")}/lobbies/${code}.json`;
 }
 
 async function readLobby(code) {
@@ -59,19 +55,16 @@ async function readLobby(code) {
     throw new Error(data.error?.message ?? "Could not read lobby.");
   }
 
-  const lobbyJson = data.fields?.data?.stringValue;
-  return lobbyJson ? JSON.parse(lobbyJson) : null;
+  return data;
 }
 
 async function writeLobby(lobby) {
   const response = await fetch(getLobbyUrl(lobby.code), {
-    method: "PATCH",
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      fields: {
-        data: { stringValue: JSON.stringify(lobby) },
-        updatedAt: { timestampValue: new Date().toISOString() },
-      },
+      ...lobby,
+      updatedAt: Date.now(),
     }),
   });
   const data = await response.json();
