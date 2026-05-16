@@ -169,10 +169,18 @@ function getSavedPlayerSessionSnapshot() {
     return "";
   }
 
-  return window.localStorage.getItem(SESSION_KEY) ?? "";
+  try {
+    return window.localStorage.getItem(SESSION_KEY) ?? "";
+  } catch {
+    return "";
+  }
 }
 
 function subscribeToSavedSession(callback) {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
   window.addEventListener("storage", callback);
   window.addEventListener("bingo-session-change", callback);
 
@@ -211,14 +219,18 @@ function parseSavedPlayerSession(savedSession) {
 }
 
 function savePlayerSession(playerName, session) {
-  window.localStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify({
-      playerName,
-      session,
-    }),
-  );
-  window.dispatchEvent(new Event("bingo-session-change"));
+  try {
+    window.localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({
+        playerName,
+        session,
+      }),
+    );
+    window.dispatchEvent(new Event("bingo-session-change"));
+  } catch {
+    // Storage can be unavailable in strict browser privacy modes.
+  }
 }
 
 function removeSavedPlayerSession() {
@@ -226,8 +238,27 @@ function removeSavedPlayerSession() {
     return;
   }
 
-  window.localStorage.removeItem(SESSION_KEY);
-  window.dispatchEvent(new Event("bingo-session-change"));
+  try {
+    window.localStorage.removeItem(SESSION_KEY);
+    window.dispatchEvent(new Event("bingo-session-change"));
+  } catch {
+    // Storage can be unavailable in strict browser privacy modes.
+  }
+}
+
+function isValidLobby(lobby) {
+  return (
+    lobby &&
+    typeof lobby.code === "string" &&
+    Array.isArray(lobby.players) &&
+    lobby.players.length === 2 &&
+    Array.isArray(lobby.boards) &&
+    lobby.boards.length === 2 &&
+    lobby.boards.every((board) => Array.isArray(board) && board.length === 25) &&
+    Array.isArray(lobby.nextNumbers) &&
+    lobby.nextNumbers.length === 2 &&
+    Array.isArray(lobby.calledNumbers)
+  );
 }
 
 export default function BingoGame() {
@@ -297,6 +328,11 @@ export default function BingoGame() {
 
       try {
         const latestLobby = await fetchLobby(activeSession.code);
+
+        if (!isValidLobby(latestLobby)) {
+          throw new Error("Saved lobby data is invalid. Please create a new lobby.");
+        }
+
         setLobby(latestLobby);
       } catch (error) {
         removeSavedPlayerSession();
@@ -325,7 +361,9 @@ export default function BingoGame() {
       lobby: updatedLobby,
     });
     optimisticPendingRef.current = false;
-    setLobby(data.lobby);
+    if (isValidLobby(data.lobby)) {
+      setLobby(data.lobby);
+    }
   }
 
   function confirmName() {
@@ -347,6 +385,10 @@ export default function BingoGame() {
         action: "create",
         playerName: activePlayerName,
       });
+      if (!isValidLobby(data.lobby)) {
+        throw new Error("Created lobby data is invalid.");
+      }
+
       setLobby(data.lobby);
       setSession({ code: data.lobby.code, playerIndex: data.playerIndex });
       setJoinCode(data.lobby.code);
@@ -363,6 +405,10 @@ export default function BingoGame() {
         code: joinCode,
         playerName: activePlayerName,
       });
+      if (!isValidLobby(data.lobby)) {
+        throw new Error("Joined lobby data is invalid.");
+      }
+
       setLobby(data.lobby);
       setSession({ code: data.lobby.code, playerIndex: data.playerIndex });
       setMessage("");
