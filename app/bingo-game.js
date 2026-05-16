@@ -191,9 +191,16 @@ function parseSavedPlayerSession(savedSession) {
     const parsedSession = JSON.parse(savedSession);
 
     if (parsedSession?.playerName) {
+      const savedPlayerIndex = parsedSession.session?.playerIndex;
+      const savedSession =
+        parsedSession.session?.code &&
+        (savedPlayerIndex === 0 || savedPlayerIndex === 1)
+          ? parsedSession.session
+          : null;
+
       return {
         playerName: parsedSession.playerName,
-        session: parsedSession.session?.code ? parsedSession.session : null,
+        session: savedSession,
       };
     }
   } catch {
@@ -244,7 +251,10 @@ export default function BingoGame() {
   const activeSession = session ?? savedPlayerSession?.session ?? null;
   const activePlayerName = playerName || savedPlayerSession?.playerName || "";
   const hasConfirmedName = nameConfirmed || Boolean(savedPlayerSession?.playerName);
-  const playerIndex = activeSession?.playerIndex ?? -1;
+  const playerIndex =
+    activeSession?.playerIndex === 0 || activeSession?.playerIndex === 1
+      ? activeSession.playerIndex
+      : -1;
   const opponentIndex = playerIndex === 0 ? 1 : 0;
   const currentBoard = playerIndex >= 0 ? lobby?.boards[playerIndex] : null;
   const currentPlayer = playerIndex >= 0 ? lobby?.players[playerIndex] : null;
@@ -501,7 +511,7 @@ export default function BingoGame() {
     );
   }
 
-  if (activeSession && !lobby) {
+  if (activeSession && playerIndex >= 0 && !lobby) {
     return (
       <section className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 lg:px-8">
         <Card>
@@ -521,7 +531,7 @@ export default function BingoGame() {
     );
   }
 
-  if (!activeSession || !lobby) {
+  if (!activeSession || playerIndex < 0 || !lobby) {
     return (
       <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-4">
