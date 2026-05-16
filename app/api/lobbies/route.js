@@ -1,15 +1,10 @@
+import { deleteDoc, doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 const BOARD_SIZE = 25;
 const EMPTY_BOARD = Array.from({ length: BOARD_SIZE }, () => null);
 
 export const dynamic = "force-dynamic";
-
-function getStore() {
-  if (!globalThis.bingoLobbyStore) {
-    globalThis.bingoLobbyStore = new Map();
-  }
-
-  return globalThis.bingoLobbyStore;
-}
 
 function createLobbyCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -37,9 +32,26 @@ function json(data, init) {
   return Response.json(data, init);
 }
 
+function getLobbyRef(code) {
+  return doc(db, "lobbies", code);
+}
+
+async function readLobby(code) {
+  if (!code) {
+    return null;
+  }
+
+  const snapshot = await getDoc(getLobbyRef(code));
+  return snapshot.exists() ? snapshot.data() : null;
+}
+
+async function writeLobby(lobby) {
+  await setDoc(getLobbyRef(lobby.code), lobby);
+}
+
 export async function GET(request) {
   const code = normalizeCode(new URL(request.url).searchParams.get("code"));
-  const lobby = getStore().get(code);
+  const lobby = await readLobby(code);
 
   if (!lobby) {
     return json({ error: "No lobby found with that code." }, { status: 404 });
@@ -49,7 +61,6 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const store = getStore();
   const body = await request.json();
   const action = body.action;
 
@@ -61,12 +72,12 @@ export async function POST(request) {
     }
 
     let code = createLobbyCode();
-    while (store.has(code)) {
+    while (await readLobby(code)) {
       code = createLobbyCode();
     }
 
     const lobby = createEmptyLobby(code, playerName);
-    store.set(code, lobby);
+    await writeLobby(lobby);
 
     return json({ lobby, playerIndex: 0 });
   }
@@ -74,7 +85,7 @@ export async function POST(request) {
   if (action === "join") {
     const code = normalizeCode(body.code);
     const playerName = String(body.playerName ?? "").trim();
-    const lobby = store.get(code);
+    const lobby = await readLobby(code);
 
     if (!playerName) {
       return json({ error: "Enter your player name first." }, { status: 400 });
@@ -93,7 +104,7 @@ export async function POST(request) {
       players: [lobby.players[0], { name: playerName, joined: true }],
     };
 
-    store.set(code, updatedLobby);
+    await writeLobby(updatedLobby);
 
     return json({ lobby: updatedLobby, playerIndex: 1 });
   }
@@ -106,18 +117,18 @@ export async function POST(request) {
       return json({ error: "Invalid lobby update." }, { status: 400 });
     }
 
-    if (!store.has(code)) {
+    if (!(await readLobby(code))) {
       return json({ error: "No lobby found with that code." }, { status: 404 });
     }
 
-    store.set(code, lobby);
+    await writeLobby(lobby);
 
     return json({ lobby });
   }
 
   if (action === "close") {
     const code = normalizeCode(body.code);
-    store.delete(code);
+    await deleteDoc(getLobbyRef(code));
 
     return json({ ok: true });
   }
