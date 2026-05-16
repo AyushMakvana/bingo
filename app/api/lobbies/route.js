@@ -1,8 +1,7 @@
-import { deleteDoc, doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-
 const BOARD_SIZE = 25;
 const EMPTY_BOARD = Array.from({ length: BOARD_SIZE }, () => null);
+const FIREBASE_PROJECT_ID = "bingo-d0bf7";
+const FIREBASE_API_KEY = "AIzaSyCPhWe234EJ5_5He2nqqrjBiysBDqkjKFc";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +31,13 @@ function json(data, init) {
   return Response.json(data, init);
 }
 
-function getLobbyRef(code) {
-  return doc(db, "lobbies", code);
+function getLobbyUrl(code) {
+  return [
+    "https://firestore.googleapis.com/v1/projects",
+    FIREBASE_PROJECT_ID,
+    "databases/(default)/documents/lobbies",
+    code,
+  ].join("/") + `?key=${FIREBASE_API_KEY}`;
 }
 
 async function readLobby(code) {
@@ -41,12 +45,55 @@ async function readLobby(code) {
     return null;
   }
 
-  const snapshot = await getDoc(getLobbyRef(code));
-  return snapshot.exists() ? snapshot.data() : null;
+  const response = await fetch(getLobbyUrl(code), {
+    cache: "no-store",
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error?.message ?? "Could not read lobby.");
+  }
+
+  const lobbyJson = data.fields?.data?.stringValue;
+  return lobbyJson ? JSON.parse(lobbyJson) : null;
 }
 
 async function writeLobby(lobby) {
-  await setDoc(getLobbyRef(lobby.code), lobby);
+  const response = await fetch(getLobbyUrl(lobby.code), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fields: {
+        data: { stringValue: JSON.stringify(lobby) },
+        updatedAt: { timestampValue: new Date().toISOString() },
+      },
+    }),
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error?.message ?? "Could not save lobby.");
+  }
+}
+
+async function deleteLobby(code) {
+  const response = await fetch(getLobbyUrl(code), {
+    method: "DELETE",
+  });
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.error?.message ?? "Could not close lobby.");
+  }
 }
 
 export async function GET(request) {
@@ -133,7 +180,7 @@ export async function POST(request) {
 
     if (action === "close") {
       const code = normalizeCode(body.code);
-      await deleteDoc(getLobbyRef(code));
+      await deleteLobby(code);
 
       return json({ ok: true });
     }
