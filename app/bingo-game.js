@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -239,6 +239,7 @@ export default function BingoGame() {
   const [message, setMessage] = useState("");
   const [session, setSession] = useState(null);
   const [lobby, setLobby] = useState(null);
+  const optimisticPendingRef = useRef(false);
 
   const activeSession = session ?? savedPlayerSession?.session ?? null;
   const activePlayerName = playerName || savedPlayerSession?.playerName || "";
@@ -280,6 +281,10 @@ export default function BingoGame() {
     }
 
     async function refreshLobby() {
+      if (optimisticPendingRef.current) {
+        return;
+      }
+
       try {
         const latestLobby = await fetchLobby(activeSession.code);
         setLobby(latestLobby);
@@ -298,12 +303,18 @@ export default function BingoGame() {
     return () => window.clearInterval(interval);
   }, [activePlayerName, activeSession]);
 
-  async function commitLobby(updatedLobby) {
+  async function commitLobby(updatedLobby, { optimistic = false } = {}) {
+    if (optimistic) {
+      optimisticPendingRef.current = true;
+      setLobby(updatedLobby);
+    }
+
     const data = await apiRequest({
       action: "update",
       code: updatedLobby.code,
       lobby: updatedLobby,
     });
+    optimisticPendingRef.current = false;
     setLobby(data.lobby);
   }
 
@@ -377,15 +388,14 @@ export default function BingoGame() {
     }
 
     try {
-      const latestLobby = await fetchLobby(lobby.code);
-      const board = latestLobby.boards[playerIndex];
+      const board = lobby.boards[playerIndex];
 
       if (board[index]) {
         return;
       }
 
-      const numberToPlace = latestLobby.nextNumbers[playerIndex];
-      const updatedBoards = latestLobby.boards.map((playerBoard, boardIndex) =>
+      const numberToPlace = lobby.nextNumbers[playerIndex];
+      const updatedBoards = lobby.boards.map((playerBoard, boardIndex) =>
         boardIndex === playerIndex
           ? playerBoard.map((value, cellIndex) =>
               cellIndex === index ? numberToPlace : value,
@@ -393,16 +403,17 @@ export default function BingoGame() {
           : playerBoard,
       );
 
-      const updatedNextNumbers = latestLobby.nextNumbers.map((number, indexToUpdate) =>
+      const updatedNextNumbers = lobby.nextNumbers.map((number, indexToUpdate) =>
         indexToUpdate === playerIndex && number < 25 ? number + 1 : number,
       );
 
       await commitLobby({
-        ...latestLobby,
+        ...lobby,
         boards: updatedBoards,
         nextNumbers: updatedNextNumbers,
-      });
+      }, { optimistic: true });
     } catch (error) {
+      optimisticPendingRef.current = false;
       setMessage(error.message);
     }
   }
@@ -413,21 +424,17 @@ export default function BingoGame() {
     }
 
     try {
-      const latestLobby = await fetchLobby(lobby.code);
-
-      if (
-        latestLobby.calledNumbers.includes(number) ||
-        latestLobby.turn !== playerIndex
-      ) {
+      if (lobby.calledNumbers.includes(number) || lobby.turn !== playerIndex) {
         return;
       }
 
       await commitLobby({
-        ...latestLobby,
-        calledNumbers: [...latestLobby.calledNumbers, number],
+        ...lobby,
+        calledNumbers: [...lobby.calledNumbers, number],
         turn: opponentIndex,
-      });
+      }, { optimistic: true });
     } catch (error) {
+      optimisticPendingRef.current = false;
       setMessage(error.message);
     }
   }
