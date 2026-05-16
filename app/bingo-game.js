@@ -239,7 +239,9 @@ export default function BingoGame() {
   const [message, setMessage] = useState("");
   const [session, setSession] = useState(null);
   const [lobby, setLobby] = useState(null);
+  const lobbyRef = useRef(null);
   const optimisticPendingRef = useRef(false);
+  const saveTimerRef = useRef(null);
 
   const activeSession = session ?? savedPlayerSession?.session ?? null;
   const activePlayerName = playerName || savedPlayerSession?.playerName || "";
@@ -276,6 +278,14 @@ export default function BingoGame() {
   }, [playerName, session]);
 
   useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!activeSession?.code) {
       return undefined;
     }
@@ -287,6 +297,7 @@ export default function BingoGame() {
 
       try {
         const latestLobby = await fetchLobby(activeSession.code);
+        lobbyRef.current = latestLobby;
         setLobby(latestLobby);
       } catch (error) {
         removeSavedPlayerSession();
@@ -303,19 +314,57 @@ export default function BingoGame() {
     return () => window.clearInterval(interval);
   }, [activePlayerName, activeSession]);
 
-  async function commitLobby(updatedLobby, { optimistic = false } = {}) {
-    if (optimistic) {
-      optimisticPendingRef.current = true;
-      setLobby(updatedLobby);
-    }
-
+  async function saveLobbyToServer(updatedLobby) {
     const data = await apiRequest({
       action: "update",
       code: updatedLobby.code,
       lobby: updatedLobby,
     });
-    optimisticPendingRef.current = false;
+    lobbyRef.current = data.lobby;
     setLobby(data.lobby);
+  }
+
+  function applyLocalLobby(updatedLobby) {
+    lobbyRef.current = updatedLobby;
+    setLobby(updatedLobby);
+  }
+
+  function scheduleLobbySave(updatedLobby) {
+    optimisticPendingRef.current = true;
+    applyLocalLobby(updatedLobby);
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = window.setTimeout(async () => {
+      try {
+        const latestLocalLobby = lobbyRef.current;
+
+        if (!latestLocalLobby) {
+          return;
+        }
+
+        await saveLobbyToServer(latestLocalLobby);
+        setMessage("");
+      } catch (error) {
+        setMessage(error.message);
+      } finally {
+        optimisticPendingRef.current = false;
+        saveTimerRef.current = null;
+      }
+    }, 250);
+  }
+
+  async function commitLobby(updatedLobby) {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    optimisticPendingRef.current = false;
+    applyLocalLobby(updatedLobby);
+    await saveLobbyToServer(updatedLobby);
   }
 
   function confirmName() {
@@ -337,6 +386,7 @@ export default function BingoGame() {
         action: "create",
         playerName: activePlayerName,
       });
+      lobbyRef.current = data.lobby;
       setLobby(data.lobby);
       setSession({ code: data.lobby.code, playerIndex: data.playerIndex });
       setJoinCode(data.lobby.code);
@@ -353,6 +403,7 @@ export default function BingoGame() {
         code: joinCode,
         playerName: activePlayerName,
       });
+      lobbyRef.current = data.lobby;
       setLobby(data.lobby);
       setSession({ code: data.lobby.code, playerIndex: data.playerIndex });
       setMessage("");
@@ -362,8 +413,15 @@ export default function BingoGame() {
   }
 
   function leaveLobby() {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    optimisticPendingRef.current = false;
     removeSavedPlayerSession();
     setSession(null);
+    lobbyRef.current = null;
     setLobby(null);
     setJoinCode("");
     setMessage("");
@@ -383,19 +441,30 @@ export default function BingoGame() {
   }
 
   async function fillCell(index) {
-    if (!lobby || playerIndex < 0 || !lobbyReady || setupComplete) {
+    const currentLobby = lobbyRef.current ?? lobby;
+
+    if (!currentLobby || playerIndex < 0) {
+      return;
+    }
+
+    const currentLobbyReady = currentLobby.players.every((player) => player.joined);
+    const currentSetupComplete = currentLobby.boards.every((board) =>
+      board.every(Boolean),
+    );
+
+    if (!currentLobbyReady || currentSetupComplete) {
       return;
     }
 
     try {
-      const board = lobby.boards[playerIndex];
+      const board = currentLobby.boards[playerIndex];
 
       if (board[index]) {
         return;
       }
 
-      const numberToPlace = lobby.nextNumbers[playerIndex];
-      const updatedBoards = lobby.boards.map((playerBoard, boardIndex) =>
+      const numberToPlace = currentLobby.nextNumbers[playerIndex];
+      const updatedBoards = currentLobby.boards.map((playerBoard, boardIndex) =>
         boardIndex === playerIndex
           ? playerBoard.map((value, cellIndex) =>
               cellIndex === index ? numberToPlace : value,
@@ -403,15 +472,15 @@ export default function BingoGame() {
           : playerBoard,
       );
 
-      const updatedNextNumbers = lobby.nextNumbers.map((number, indexToUpdate) =>
+      const updatedNextNumbers = currentLobby.nextNumbers.map((number, indexToUpdate) =>
         indexToUpdate === playerIndex && number < 25 ? number + 1 : number,
       );
 
-      await commitLobby({
-        ...lobby,
+      scheduleLobbySave({
+        ...currentLobby,
         boards: updatedBoards,
         nextNumbers: updatedNextNumbers,
-      }, { optimistic: true });
+      });
     } catch (error) {
       optimisticPendingRef.current = false;
       setMessage(error.message);
@@ -419,20 +488,36 @@ export default function BingoGame() {
   }
 
   async function callNumber(number) {
-    if (!lobby || !canCallNumber || lobby.calledNumbers.includes(number)) {
+    const currentLobby = lobbyRef.current ?? lobby;
+    const currentSetupComplete = currentLobby?.boards.every((board) =>
+      board.every(Boolean),
+    );
+    const currentScores = currentLobby
+      ? currentLobby.boards.map((board) =>
+          Math.min(getCompletedLines(board, currentLobby.calledNumbers), 5),
+        )
+      : [0, 0];
+    const currentWinner = currentScores.some((score) => score >= 5);
+    const currentCanCallNumber =
+      currentSetupComplete &&
+      !currentWinner &&
+      currentLobby?.turn === playerIndex &&
+      currentLobby.players.every((player) => player.joined);
+
+    if (!currentLobby || !currentCanCallNumber || currentLobby.calledNumbers.includes(number)) {
       return;
     }
 
     try {
-      if (lobby.calledNumbers.includes(number) || lobby.turn !== playerIndex) {
+      if (currentLobby.calledNumbers.includes(number) || currentLobby.turn !== playerIndex) {
         return;
       }
 
-      await commitLobby({
-        ...lobby,
-        calledNumbers: [...lobby.calledNumbers, number],
+      scheduleLobbySave({
+        ...currentLobby,
+        calledNumbers: [...currentLobby.calledNumbers, number],
         turn: opponentIndex,
-      }, { optimistic: true });
+      });
     } catch (error) {
       optimisticPendingRef.current = false;
       setMessage(error.message);
