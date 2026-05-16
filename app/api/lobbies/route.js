@@ -28,6 +28,62 @@ function createEmptyLobby(code, playerName) {
   };
 }
 
+function toArray(value, length, fallbackValue = null) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? Object.keys(value)
+          .sort((a, b) => Number(a) - Number(b))
+          .map((key) => value[key])
+      : [];
+
+  return Array.from({ length }, (_, index) =>
+    source[index] === undefined ? fallbackValue : source[index],
+  );
+}
+
+function normalizeBoard(board) {
+  return toArray(board, BOARD_SIZE).map((cell) =>
+    Number(cell) >= 1 && Number(cell) <= 25 ? Number(cell) : null,
+  );
+}
+
+function normalizeLobby(lobby, fallbackCode = "") {
+  if (!lobby || typeof lobby !== "object") {
+    return null;
+  }
+
+  const players = toArray(lobby.players, 2, { name: "", joined: false }).map(
+    (player) => ({
+      name: String(player?.name ?? ""),
+      joined: Boolean(player?.joined),
+    }),
+  );
+
+  return {
+    code: normalizeCode(lobby.code || fallbackCode),
+    players,
+    boards: [
+      normalizeBoard(lobby.boards?.[0] ?? lobby.boards?.["0"]),
+      normalizeBoard(lobby.boards?.[1] ?? lobby.boards?.["1"]),
+    ],
+    nextNumbers: toArray(lobby.nextNumbers, 2, 1).map((number) =>
+      Number(number) >= 1 && Number(number) <= 25 ? Number(number) : 1,
+    ),
+    calledNumbers: toArray(lobby.calledNumbers, 25)
+      .map((number) => Number(number))
+      .filter((number) => number >= 1 && number <= 25),
+    turn: Number(lobby.turn) === 1 ? 1 : 0,
+  };
+}
+
+function serializeLobby(lobby) {
+  return {
+    ...lobby,
+    boards: lobby.boards.map((board) => board.map((cell) => cell ?? 0)),
+  };
+}
+
 function json(data, init) {
   return Response.json(data, init);
 }
@@ -55,15 +111,16 @@ async function readLobby(code) {
     throw new Error(data.error?.message ?? "Could not read lobby.");
   }
 
-  return data;
+  return normalizeLobby(data, code);
 }
 
 async function writeLobby(lobby) {
+  const lobbyToSave = serializeLobby(normalizeLobby(lobby, lobby.code));
   const response = await fetch(getLobbyUrl(lobby.code), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      ...lobby,
+      ...lobbyToSave,
       updatedAt: Date.now(),
     }),
   });
