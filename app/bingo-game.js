@@ -51,7 +51,8 @@ async function apiRequest(body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = await response.json();
+  const text = await response.text();
+  const data = parseApiResponse(text);
 
   if (!response.ok) {
     throw new Error(data.error ?? "Something went wrong.");
@@ -64,13 +65,26 @@ async function fetchLobby(code) {
   const response = await fetch(`/api/lobbies?code=${encodeURIComponent(code)}`, {
     cache: "no-store",
   });
-  const data = await response.json();
+  const text = await response.text();
+  const data = parseApiResponse(text);
 
   if (!response.ok) {
     throw new Error(data.error ?? "No lobby found with that code.");
   }
 
   return data.lobby;
+}
+
+function parseApiResponse(text) {
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text.slice(0, 160) };
+  }
 }
 
 function Input({ className = "", ...props }) {
