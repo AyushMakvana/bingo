@@ -25,6 +25,7 @@ function createEmptyLobby(code, playerName) {
     nextNumbers: [1, 1],
     calledNumbers: [],
     turn: 0,
+    winnerIndex: null,
   };
 }
 
@@ -74,6 +75,10 @@ function normalizeLobby(lobby, fallbackCode = "") {
       .map((number) => Number(number))
       .filter((number) => number >= 1 && number <= 25),
     turn: Number(lobby.turn) === 1 ? 1 : 0,
+    winnerIndex:
+      Number(lobby.winnerIndex) === 0 || Number(lobby.winnerIndex) === 1
+        ? Number(lobby.winnerIndex)
+        : null,
   };
 }
 

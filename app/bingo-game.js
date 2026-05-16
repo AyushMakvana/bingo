@@ -257,7 +257,11 @@ function isValidLobby(lobby) {
     lobby.boards.every((board) => Array.isArray(board) && board.length === 25) &&
     Array.isArray(lobby.nextNumbers) &&
     lobby.nextNumbers.length === 2 &&
-    Array.isArray(lobby.calledNumbers)
+    Array.isArray(lobby.calledNumbers) &&
+    (lobby.winnerIndex === null ||
+      lobby.winnerIndex === undefined ||
+      lobby.winnerIndex === 0 ||
+      lobby.winnerIndex === 1)
   );
 }
 
@@ -303,7 +307,10 @@ export default function BingoGame() {
         : [0, 0],
     [lobby],
   );
-  const winnerIndex = scores.findIndex((score) => score >= 5);
+  const winnerIndex =
+    lobby?.winnerIndex === 0 || lobby?.winnerIndex === 1
+      ? lobby.winnerIndex
+      : scores.findIndex((score) => score >= 5);
   const winner = winnerIndex >= 0 ? lobby?.players[winnerIndex]?.name : "";
   const canCallNumber =
     setupComplete && !winner && lobby?.turn === playerIndex && lobbyReady;
@@ -484,10 +491,22 @@ export default function BingoGame() {
         return;
       }
 
+      const nextCalledNumbers = [...lobby.calledNumbers, number];
+      const nextScores = lobby.boards.map((board) =>
+        Math.min(getCompletedLines(board, nextCalledNumbers), 5),
+      );
+      const nextWinnerIndex =
+        nextScores[playerIndex] >= 5
+          ? playerIndex
+          : nextScores[opponentIndex] >= 5
+            ? opponentIndex
+            : null;
+
       await commitLobby({
         ...lobby,
-        calledNumbers: [...lobby.calledNumbers, number],
+        calledNumbers: nextCalledNumbers,
         turn: opponentIndex,
+        winnerIndex: nextWinnerIndex,
       }, { optimistic: true });
     } catch (error) {
       optimisticPendingRef.current = false;
@@ -511,6 +530,7 @@ export default function BingoGame() {
         nextNumbers: [1, 1],
         calledNumbers: [],
         turn: 0,
+        winnerIndex: null,
       });
       setMessage("");
     } catch (error) {
