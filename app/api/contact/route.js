@@ -1,5 +1,7 @@
 const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL ?? "ayushmakvana02@gmail.com";
-const MAILSLURP_API_URL = "https://api.mailslurp.com/emails";
+const RESEND_API_URL = "https://api.resend.com/emails";
+const RESEND_FROM_EMAIL =
+  process.env.RESEND_FROM_EMAIL ?? "Bingo Contact <onboarding@resend.dev>";
 
 export const dynamic = "force-dynamic";
 
@@ -16,24 +18,24 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-async function readMailSlurpError(response) {
+async function readResendError(response) {
   const text = await response.text();
 
   try {
     const data = JSON.parse(text);
-    return data.message || data.error || text;
+    return data.message || data.error?.message || data.error || text;
   } catch {
-    return text || "MailSlurp could not send the email.";
+    return text || "Resend could not send the email.";
   }
 }
 
 export async function POST(request) {
   try {
-    const apiKey = process.env.MAILSLURP_API_KEY;
+    const apiKey = process.env.RESEND_API_KEY;
 
     if (!apiKey) {
       return json(
-        { error: "MAILSLURP_API_KEY is not configured on the server." },
+        { error: "RESEND_API_KEY is not configured on the server." },
         { status: 500 },
       );
     }
@@ -47,26 +49,18 @@ export async function POST(request) {
       return json({ error: "Name, email, and message are required." }, { status: 400 });
     }
 
-    const url = new URL(MAILSLURP_API_URL);
-
-    if (process.env.MAILSLURP_INBOX_ID) {
-      url.searchParams.set("inboxId", process.env.MAILSLURP_INBOX_ID);
-    } else {
-      url.searchParams.set("useDomainPool", "true");
-    }
-
-    const response = await fetch(url, {
+    const response = await fetch(RESEND_API_URL, {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
       },
       body: JSON.stringify({
+        from: RESEND_FROM_EMAIL,
         to: [CONTACT_TO_EMAIL],
-        replyTo: trimmedEmail,
+        reply_to: trimmedEmail,
         subject: "New Bingo Contact Message",
-        isHTML: true,
-        body: [
+        html: [
           "<h2>New Bingo Contact Message</h2>",
           `<p><strong>Name:</strong> ${escapeHtml(trimmedName)}</p>`,
           `<p><strong>Email:</strong> ${escapeHtml(trimmedEmail)}</p>`,
@@ -77,7 +71,7 @@ export async function POST(request) {
     });
 
     if (!response.ok) {
-      return json({ error: await readMailSlurpError(response) }, { status: 502 });
+      return json({ error: await readResendError(response) }, { status: 502 });
     }
 
     return json({ ok: true });
