@@ -8,16 +8,35 @@ export default function ContactForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [notice, setNotice] = useState("");
 
-  function sendMessage(event) {
+  async function sendMessage(event) {
     event.preventDefault();
+    setStatus("sending");
+    setNotice("");
 
-    const subject = encodeURIComponent("New Bingo Contact Message");
-    const body = encodeURIComponent(
-      [`Name: ${name}`, `Email: ${email}`, "", message].join("\n"),
-    );
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, message }),
+      });
+      const data = await response.json();
 
-    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+      if (!response.ok) {
+        throw new Error(data.error || "Message could not be sent.");
+      }
+
+      setName("");
+      setEmail("");
+      setMessage("");
+      setStatus("sent");
+      setNotice("Message sent. Check your inbox.");
+    } catch (error) {
+      setStatus("error");
+      setNotice(error.message);
+    }
   }
 
   return (
@@ -58,13 +77,27 @@ export default function ContactForm() {
       </label>
       <button
         className="h-11 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+        disabled={status === "sending"}
         type="submit"
       >
-        Send Message
+        {status === "sending" ? "Sending..." : "Send Message"}
       </button>
-      <p className="text-sm leading-6 text-slate-600">
-        This opens your email app with the message addressed to {CONTACT_EMAIL}.
-      </p>
+      {notice ? (
+        <p
+          className={[
+            "rounded-md px-4 py-3 text-sm font-semibold",
+            status === "error"
+              ? "bg-red-100 text-red-800"
+              : "bg-emerald-100 text-emerald-800",
+          ].join(" ")}
+        >
+          {notice}
+        </p>
+      ) : (
+        <p className="text-sm leading-6 text-slate-600">
+          Messages are sent securely to {CONTACT_EMAIL}.
+        </p>
+      )}
     </form>
   );
 }
