@@ -1,8 +1,31 @@
-const BOARD_SIZE = 25;
-const EMPTY_BOARD = Array.from({ length: BOARD_SIZE }, () => null);
 const FIREBASE_DATABASE_URL =
   process.env.FIREBASE_DATABASE_URL ??
   "https://bingo-d0bf7-default-rtdb.firebaseio.com";
+
+const WORDS = [
+  "rice",
+  "cake",
+  "milk",
+  "egg",
+  "tea",
+  "cat",
+  "dog",
+  "cow",
+  "hen",
+  "owl",
+  "bee",
+  "ant",
+  "pen",
+  "cup",
+  "key",
+  "bag",
+  "soap",
+  "lamp",
+  "fan",
+  "book",
+  "shoe",
+  "ball",
+];
 
 export const dynamic = "force-dynamic";
 
@@ -14,86 +37,12 @@ function normalizeCode(code) {
   return String(code ?? "").trim().toUpperCase();
 }
 
-function createEmptyLobby(code, playerName) {
-  return {
-    code,
-    players: [
-      { name: playerName, joined: true },
-      { name: "", joined: false },
-    ],
-    boards: [EMPTY_BOARD, EMPTY_BOARD],
-    nextNumbers: [1, 1],
-    calledNumbers: [],
-    turn: 0,
-    winnerIndex: null,
-  };
+function pickWord() {
+  return WORDS[Math.floor(Math.random() * WORDS.length)];
 }
 
-function toArray(value, length, fallbackValue = null) {
-  const source = Array.isArray(value)
-    ? value
-    : value && typeof value === "object"
-      ? Object.keys(value)
-          .sort((a, b) => Number(a) - Number(b))
-          .map((key) => value[key])
-      : [];
-
-  return Array.from({ length }, (_, index) =>
-    source[index] === undefined ? fallbackValue : source[index],
-  );
-}
-
-function normalizeBoard(board) {
-  return toArray(board, BOARD_SIZE).map((cell) =>
-    Number(cell) >= 1 && Number(cell) <= 25 ? Number(cell) : null,
-  );
-}
-
-function normalizeLobby(lobby, fallbackCode = "") {
-  if (!lobby || typeof lobby !== "object") {
-    return null;
-  }
-
-  const players = toArray(lobby.players, 2, { name: "", joined: false }).map(
-    (player) => ({
-      name: String(player?.name ?? ""),
-      joined: Boolean(player?.joined),
-    }),
-  );
-
-  const boards = [
-    normalizeBoard(lobby.boards?.[0] ?? lobby.boards?.["0"]),
-    normalizeBoard(lobby.boards?.[1] ?? lobby.boards?.["1"]),
-  ];
-  const calledNumbers = toArray(lobby.calledNumbers, 25)
-    .map((number) => Number(number))
-    .filter((number) => number >= 1 && number <= 25);
-  const savedWinnerIndex =
-    Number(lobby.winnerIndex) === 0 || Number(lobby.winnerIndex) === 1
-      ? Number(lobby.winnerIndex)
-      : null;
-
-  return {
-    code: normalizeCode(lobby.code || fallbackCode),
-    players,
-    boards,
-    nextNumbers: toArray(lobby.nextNumbers, 2, 1).map((number) =>
-      Number(number) >= 1 && Number(number) <= 25 ? Number(number) : 1,
-    ),
-    calledNumbers,
-    turn: Number(lobby.turn) === 1 ? 1 : 0,
-    winnerIndex:
-      savedWinnerIndex !== null && calledNumbers.length > 0
-        ? savedWinnerIndex
-        : null,
-  };
-}
-
-function serializeLobby(lobby) {
-  return {
-    ...lobby,
-    boards: lobby.boards.map((board) => board.map((cell) => cell ?? 0)),
-  };
+function getLobbyUrl(code) {
+  return `${FIREBASE_DATABASE_URL.replace(/\/$/, "")}/wordLobbies/${code}.json`;
 }
 
 function json(data, init) {
@@ -108,8 +57,84 @@ function getFirebaseError(data, fallback) {
   return data?.error?.message ?? fallback;
 }
 
-function getLobbyUrl(code) {
-  return `${FIREBASE_DATABASE_URL.replace(/\/$/, "")}/lobbies/${code}.json`;
+function toArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((key) => value[key]);
+  }
+
+  return [];
+}
+
+function createEmptyLobby(code, playerName, creatorRole) {
+  const creatorIsGuesser = creatorRole === "guesser";
+
+  return {
+    code,
+    word: pickWord(),
+    players: [
+      {
+        name: playerName,
+        joined: true,
+        role: creatorIsGuesser ? "guesser" : "answerer",
+      },
+      {
+        name: "",
+        joined: false,
+        role: creatorIsGuesser ? "answerer" : "guesser",
+      },
+    ],
+    messages: [],
+    status: "playing",
+    winnerIndex: null,
+    round: 1,
+  };
+}
+
+function normalizeLobby(lobby, fallbackCode = "") {
+  if (!lobby || typeof lobby !== "object") {
+    return null;
+  }
+
+  const players = toArray(lobby.players);
+  const firstRole = players[0]?.role === "answerer" ? "answerer" : "guesser";
+  const secondRole = firstRole === "guesser" ? "answerer" : "guesser";
+
+  return {
+    code: normalizeCode(lobby.code || fallbackCode),
+    word: String(lobby.word || pickWord()).toLowerCase().slice(0, 4),
+    players: [
+      {
+        name: String(players[0]?.name ?? ""),
+        joined: Boolean(players[0]?.joined),
+        role: firstRole,
+      },
+      {
+        name: String(players[1]?.name ?? ""),
+        joined: Boolean(players[1]?.joined),
+        role: secondRole,
+      },
+    ],
+    messages: toArray(lobby.messages).map((message, index) => ({
+      id: String(message?.id ?? `${index}`),
+      from: Number(message?.from) === 1 ? 1 : 0,
+      text: String(message?.text ?? ""),
+      answer: ["yes", "no", "maybe"].includes(message?.answer)
+        ? message.answer
+        : "",
+    })),
+    status: lobby.status === "won" ? "won" : "playing",
+    winnerIndex:
+      Number(lobby.winnerIndex) === 0 || Number(lobby.winnerIndex) === 1
+        ? Number(lobby.winnerIndex)
+        : null,
+    round: Number(lobby.round) >= 1 ? Number(lobby.round) : 1,
+  };
 }
 
 async function readLobby(code) {
@@ -117,9 +142,7 @@ async function readLobby(code) {
     return null;
   }
 
-  const response = await fetch(getLobbyUrl(code), {
-    cache: "no-store",
-  });
+  const response = await fetch(getLobbyUrl(code), { cache: "no-store" });
 
   if (response.status === 404) {
     return null;
@@ -135,12 +158,12 @@ async function readLobby(code) {
 }
 
 async function writeLobby(lobby) {
-  const lobbyToSave = serializeLobby(normalizeLobby(lobby, lobby.code));
-  const response = await fetch(getLobbyUrl(lobby.code), {
+  const normalizedLobby = normalizeLobby(lobby, lobby.code);
+  const response = await fetch(getLobbyUrl(normalizedLobby.code), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      ...lobbyToSave,
+      ...normalizedLobby,
       updatedAt: Date.now(),
     }),
   });
@@ -152,9 +175,7 @@ async function writeLobby(lobby) {
 }
 
 async function deleteLobby(code) {
-  const response = await fetch(getLobbyUrl(code), {
-    method: "DELETE",
-  });
+  const response = await fetch(getLobbyUrl(code), { method: "DELETE" });
 
   if (response.status === 404) {
     return;
@@ -188,6 +209,7 @@ export async function POST(request) {
 
     if (action === "create") {
       const playerName = String(body.playerName ?? "").trim();
+      const creatorRole = body.creatorRole === "answerer" ? "answerer" : "guesser";
 
       if (!playerName) {
         return json({ error: "Enter your player name first." }, { status: 400 });
@@ -198,7 +220,7 @@ export async function POST(request) {
         code = createLobbyCode();
       }
 
-      const lobby = createEmptyLobby(code, playerName);
+      const lobby = createEmptyLobby(code, playerName, creatorRole);
       await writeLobby(lobby);
 
       return json({ lobby, playerIndex: 0 });
@@ -223,7 +245,7 @@ export async function POST(request) {
 
       const updatedLobby = {
         ...lobby,
-        players: [lobby.players[0], { name: playerName, joined: true }],
+        players: [lobby.players[0], { ...lobby.players[1], name: playerName, joined: true }],
       };
 
       await writeLobby(updatedLobby);
@@ -235,7 +257,7 @@ export async function POST(request) {
       const code = normalizeCode(body.code);
       const lobby = body.lobby;
 
-      if (!code || !lobby || lobby.code !== code) {
+      if (!code || !lobby || normalizeCode(lobby.code) !== code) {
         return json({ error: "Invalid lobby update." }, { status: 400 });
       }
 
@@ -245,7 +267,29 @@ export async function POST(request) {
 
       await writeLobby(lobby);
 
-      return json({ lobby });
+      return json({ lobby: normalizeLobby(lobby, code) });
+    }
+
+    if (action === "new-round") {
+      const code = normalizeCode(body.code);
+      const lobby = await readLobby(code);
+
+      if (!lobby) {
+        return json({ error: "No lobby found with that code." }, { status: 404 });
+      }
+
+      const updatedLobby = {
+        ...lobby,
+        word: pickWord(),
+        messages: [],
+        status: "playing",
+        winnerIndex: null,
+        round: lobby.round + 1,
+      };
+
+      await writeLobby(updatedLobby);
+
+      return json({ lobby: updatedLobby });
     }
 
     if (action === "close") {

@@ -2,8 +2,8 @@ import Link from "next/link";
 import "./globals.css";
 
 export const metadata = {
-  title: "Bingo",
-  description: "A two-player Bingo game built with Next.js and Tailwind CSS.",
+  title: "Game Lobby",
+  description: "Two-player browser games built with Next.js and Tailwind CSS.",
 };
 
 const navItems = [
@@ -20,7 +20,7 @@ export default function RootLayout({ children }) {
         <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
           <nav className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
             <Link className="text-xl font-black tracking-normal text-slate-950" href="/">
-              Bingo
+              Game Lobby
             </Link>
             <div className="flex items-center gap-1">
               {navItems.map((item) => (
