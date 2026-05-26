@@ -21,6 +21,8 @@ const games = [
   },
 ];
 
+const guessWordPreview = ["GUESS"];
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50">
@@ -54,19 +56,36 @@ export default function Home() {
                   {game.title}
                 </h2>
               </div>
-              <div className="flex gap-1">
-                {game.preview.map((item) => (
-                  <span
-                    className={[
-                      "flex h-10 w-10 items-center justify-center rounded-md text-lg font-black text-white",
-                      game.accent,
-                    ].join(" ")}
-                    key={item}
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
+              {game.href === "/guess-word" ? (
+                <div className="grid gap-1">
+                  {guessWordPreview.map((word) => (
+                    <div className="flex gap-1" key={word}>
+                      {word.split("").map((letter, index) => (
+                        <span
+                          className="flex h-10 w-10 items-center justify-center rounded-md bg-amber-500 text-lg font-black text-white"
+                          key={`${word}-${letter}-${index}`}
+                        >
+                          {letter}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex gap-1">
+                  {game.preview.map((item) => (
+                    <span
+                      className={[
+                        "flex h-10 w-10 items-center justify-center rounded-md text-lg font-black text-white",
+                        game.accent,
+                      ].join(" ")}
+                      key={item}
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <p className="mt-4 max-w-xl text-sm leading-6 text-slate-600">
               {game.description}

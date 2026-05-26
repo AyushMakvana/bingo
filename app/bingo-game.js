@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import {
   Card,
   CardContent,
@@ -116,14 +117,14 @@ function Board({ board, calledNumbers, onCellClick, setupMode, title, active }) 
           {active ? "Your turn" : "Waiting"}
         </span>
       </div>
-      <div className="mx-auto grid aspect-square w-full max-w-[520px] grid-cols-5 gap-1.5 sm:gap-2">
+      <div className="mx-auto grid aspect-square w-full max-w-[390px] grid-cols-5 gap-1.5">
         {board.map((number, index) => {
           const marked = number && called.has(number);
 
           return (
             <button
               className={[
-                "flex min-h-11 items-center justify-center rounded-md border text-base font-bold transition sm:text-lg",
+                "flex min-h-10 items-center justify-center rounded-md border text-sm font-bold transition sm:text-base",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                 marked
                   ? "border-emerald-700 bg-emerald-600 text-white shadow-sm"
@@ -668,154 +669,149 @@ export default function BingoGame() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Lobby</CardTitle>
-              <CardDescription>
-                Keep this screen private. Your opponent cannot see your board here.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg bg-slate-100 p-4">
-                <p className="text-xs font-semibold uppercase text-slate-500">
-                  Lobby code
-                </p>
-                <p className="mt-1 text-3xl font-black tracking-normal text-slate-950">
-                  {lobby.code}
-                </p>
+    <section className="min-h-[calc(100vh-74px)] bg-slate-50">
+      <div className="border-b border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex w-full max-w-[1500px] flex-wrap items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <h1 className="text-xl font-black tracking-normal text-slate-950">
+            Bingo
+          </h1>
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <span>Lobby:</span>
+            <span className="text-xl font-black tracking-normal text-emerald-700">
+              {lobby.code}
+            </span>
+            <CopyButton content={lobby.code} title="Copy lobby code" />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {[playerIndex, opponentIndex].map((index) => (
+              <div className="flex items-center gap-2" key={index}>
+                <span className="text-sm font-black text-slate-950">
+                  {lobby.players[index].name || `Player ${index + 1}`}
+                </span>
+                <span className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black capitalize text-slate-950 ring-1 ring-slate-200">
+                  {index === playerIndex ? "You" : opponent?.joined ? "Opponent" : "Waiting"}
+                </span>
               </div>
-              <div className="grid gap-2 text-sm text-slate-700">
-                <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
-                  <span>{currentPlayer?.name}</span>
-                  <span className="font-semibold">You</span>
-                </div>
-                <div className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
-                  <span>{opponent?.name || "Player 2"}</span>
-                  <span className="font-semibold">
-                    {opponent?.joined ? "Joined" : "Waiting"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={leaveLobby} type="button" variant="outline">
-                  Leave
-                </Button>
-                {playerIndex === 0 ? (
-                  <Button onClick={resetLobby} type="button" variant="ghost">
-                    Close Lobby
-                  </Button>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Game Status</CardTitle>
-              <CardDescription>
-                One completed row, column, or diagonal earns the next letter.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {[playerIndex, opponentIndex].map((index) => (
-                <div className="space-y-2" key={index}>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-slate-950">
-                      {index === playerIndex
-                        ? `${lobby.players[index].name} (You)`
-                        : lobby.players[index].name || "Opponent"}
-                    </p>
-                    <p className="text-sm text-slate-500">{scores[index]} / 5</p>
-                  </div>
-                  <BingoLetters count={scores[index]} />
-                </div>
-              ))}
-              {winner ? (
-                <div className="space-y-3 rounded-lg bg-emerald-100 p-4 text-emerald-900">
-                  <p className="text-lg font-black">{winner} wins BINGO!</p>
-                  <Button onClick={startNewGame} type="button" variant="success">
-                    Start New Game
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm leading-6 text-slate-600">
-                  {!lobbyReady
-                    ? "Waiting for Player 2 to join with the lobby code."
-                    : !ownSetupComplete
-                      ? `Place number ${lobby.nextNumbers[playerIndex]} on your board.`
-                      : !setupComplete
-                        ? "Your board is ready. Waiting for your opponent."
-                        : canCallNumber
-                          ? "Your turn: choose a number."
-                          : `${lobby.players[lobby.turn].name}'s turn to choose a number.`}
-                </p>
-              )}
-              {message ? (
-                <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-900">
-                  {message}
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
+            ))}
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <Button onClick={leaveLobby} type="button" variant="outline">
+              Leave
+            </Button>
+            {playerIndex === 0 ? (
+              <Button onClick={resetLobby} type="button" variant="outline">
+                Close Lobby
+              </Button>
+            ) : null}
+          </div>
         </div>
+      </div>
 
-        <div className="space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>{setupComplete ? "Call a Number" : "Your Board Setup"}</CardTitle>
-              <CardDescription>
+      <div className="mx-auto grid w-full max-w-[1500px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
+        <Card className="min-h-[500px]">
+          <CardContent className="flex h-full flex-col gap-5 p-5 sm:p-6">
+            <div>
+              <h2 className="text-2xl font-black tracking-normal text-slate-950">
+                {setupComplete ? "Call a Number" : "Your Board Setup"}
+              </h2>
+              <p className="mt-1 text-base text-slate-500">
                 {setupComplete
-                  ? "Called numbers are marked on both private boards."
-                  : "Click your empty cells to place numbers from 1 to 25."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {setupComplete ? (
-                <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
-                  {NUMBERS.map((number) => (
-                    <Button
-                      className="font-black"
-                      disabled={lobby.calledNumbers.includes(number) || !canCallNumber}
-                      key={number}
-                      onClick={() => callNumber(number)}
-                      size="icon"
-                      type="button"
-                      variant={
-                        lobby.calledNumbers.includes(number) ? "success" : "secondary"
-                      }
-                    >
-                      {number}
-                    </Button>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-                  {!lobbyReady
-                    ? "Share the lobby code with Player 2."
-                    : ownSetupComplete
-                      ? "Your board is complete."
-                      : `Place ${lobby.nextNumbers[playerIndex]} anywhere on your board.`}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  ? "Choose a number on your turn"
+                  : "Place numbers 1 to 25 on your private board"}
+              </p>
+            </div>
 
-          <Card>
-            <CardContent className="p-4">
-              <Board
-                active={canCallNumber || (lobbyReady && !ownSetupComplete)}
-                board={currentBoard}
-                calledNumbers={lobby.calledNumbers}
-                onCellClick={fillCell}
-                setupMode={lobbyReady && !ownSetupComplete}
-                title={`${currentPlayer?.name}'s private board`}
-              />
-            </CardContent>
-          </Card>
-        </div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-slate-800">
+              <p className="text-base font-black">Game Status</p>
+              <p className="mt-1 text-sm leading-6">
+                One completed row, column, or diagonal earns the next letter.
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {[playerIndex, opponentIndex].map((index) => (
+                  <div className="space-y-2" key={index}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-black text-slate-950">
+                        {index === playerIndex
+                          ? `${lobby.players[index].name} (You)`
+                          : lobby.players[index].name || "Opponent"}
+                      </p>
+                      <p className="text-xs font-semibold text-slate-500">
+                        {scores[index]} / 5
+                      </p>
+                    </div>
+                    <BingoLetters count={scores[index]} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {winner ? (
+              <div className="rounded-lg bg-emerald-100 p-4 text-emerald-900">
+                <p className="text-lg font-black">{winner} wins BINGO!</p>
+                <Button className="mt-3" onClick={startNewGame} type="button" variant="success">
+                  Start New Game
+                </Button>
+              </div>
+            ) : setupComplete ? (
+              <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+                {NUMBERS.map((number) => (
+                  <Button
+                    className="font-black"
+                    disabled={lobby.calledNumbers.includes(number) || !canCallNumber}
+                    key={number}
+                    onClick={() => callNumber(number)}
+                    size="icon"
+                    type="button"
+                    variant={lobby.calledNumbers.includes(number) ? "success" : "secondary"}
+                  >
+                    {number}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+                {!lobbyReady
+                  ? "Share the lobby code with Player 2."
+                  : ownSetupComplete
+                    ? "Your board is complete."
+                    : `Place ${lobby.nextNumbers[playerIndex]} anywhere on your board.`}
+              </div>
+            )}
+
+            {!winner ? (
+              <p className="mt-auto rounded-lg bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+                {!lobbyReady
+                  ? "Waiting for Player 2 to join with the lobby code."
+                  : !ownSetupComplete
+                    ? `Place number ${lobby.nextNumbers[playerIndex]} on your board.`
+                    : !setupComplete
+                      ? "Your board is ready. Waiting for your opponent."
+                      : canCallNumber
+                        ? "Your turn: choose a number."
+                        : `${lobby.players[lobby.turn].name}'s turn to choose a number.`}
+              </p>
+            ) : null}
+
+            {message ? (
+              <p className="rounded-lg bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-900">
+                {message}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-[500px]">
+          <CardContent className="p-5 sm:p-6">
+            <Board
+              active={canCallNumber || (lobbyReady && !ownSetupComplete)}
+              board={currentBoard}
+              calledNumbers={lobby.calledNumbers}
+              onCellClick={fillCell}
+              setupMode={lobbyReady && !ownSetupComplete}
+              title={`${currentPlayer?.name}'s private board`}
+            />
+          </CardContent>
+        </Card>
       </div>
     </section>
   );
